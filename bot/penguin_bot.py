@@ -11,13 +11,17 @@ from houdini.plugins.bot.fake_writer import FakeWriter
 class PenguinBot(Penguin):
     
     snowball_margin = 25
-    room_ids = [
+    default_room_ids = [
         100, 110, 111, 120, 121, 130, 300, 310, 320, 330, 340, 200, 220,
         230, 801, 802, 800, 400, 410, 411, 809, 805, 810, 806, 808, 807
     ]
+    default_salute_messages = [101, 151]
+    valid_frames = range(18, 26)
+    activity_sleep_range = range(5, 16)
     
-    def __init__(self, penguin_id: str, server):
+    def __init__(self, penguin_id: str, plugin_config: dict, server):
         self.penguin_id = penguin_id
+        self.plugin_config = plugin_config
         self.server = server
         self.penguin_data = None
         self.following_penguin = None
@@ -26,10 +30,6 @@ class PenguinBot(Penguin):
         
         all_items = [self.server.items[x] for x in self.server.items]
 
-        """
-        This is intentionally placed outside of the if statement to allow randomization (via the command)
-        even if the bot wasn't initially created randomly.
-        """
         # TODO: Exclude bait items probably (LAZY)
         self._head_ids = [item.id for item in all_items if item.is_head()]
         self._face_ids = [item.id for item in all_items if item.is_face()]
@@ -45,21 +45,24 @@ class PenguinBot(Penguin):
     async def load(self):
         self.penguin_data = await houdini.data.penguin.Penguin.get(self.penguin_id)
         self.update(**self.penguin_data.to_dict())
-        await self.randomize_clothes()
         self.randomize_position()
+        if self.plugin_config.get('enable_random_clothing', True):
+            await self.randomize_clothes()
         
     def begin_activity(self):
         asyncio.create_task(self.activity_loop())
         
     async def activity_loop(self):
         while True:
-            await asyncio.sleep(random.choice(range(5, 16)))
-            await self.random_frame()
-            await asyncio.sleep(random.choice(range(5, 16)))
-            await self.random_move()
+            if self.plugin_config.get('enable_random_frame', True):
+                await asyncio.sleep(random.choice(self.activity_sleep_range))
+                await self.random_frame()
+            if self.plugin_config.get('enable_random_movement', True):
+                await asyncio.sleep(random.choice(self.activity_sleep_range))
+                await self.random_move()
             
     async def random_frame(self):
-        self.frame = random.choice(range(18, 26))
+        self.frame = random.choice(self.valid_frames)
         await self.room.send_xt('sf', self.id, self.frame)
             
     async def random_move(self):
@@ -69,24 +72,27 @@ class PenguinBot(Penguin):
     async def handle_join_room(self, p, room: Room):
         if self.following_penguin and p.id == self.following_penguin.id:
             await self.join_room(room)
-        elif room.id == self.room.id:
+        elif room.id == self.room.id and self.plugin_config.get('enable_salute', True):
             await self.salute()
     
     async def salute(self):
-        await asyncio.sleep(3)
-        await self.room.send_xt('ss', self.id, 101)
-        await asyncio.sleep(3)
-        await self.room.send_xt('ss', self.id, 151)
+        for message in self.plugin_config.get('salute_messages', self.default_salute_messages):
+            await asyncio.sleep(3)
+            await self.room.send_xt('ss', self.id, message)
             
     async def handle_snowball(self, p, x: int, y: int):
         if (x in range(self.x - self.snowball_margin, self.x + self.snowball_margin) and
             y in range(self.y - self.snowball_margin, self.y + self.snowball_margin)):
             await asyncio.sleep(1)
-            if random.random() > 0.5:
-                return await self.lament_snowball()
-            await self.throw_snowball_back(p)
+            snowball_reactions = [
+                (self.lament_snowball, self.plugin_config.get('enable_snowball_lament', True)),
+                (self.throw_snowball_back, self.plugin_config.get('enable_snowball_throwback', True))
+            ]
+            enabled_reactions = [f for f, e in snowball_reactions if e]
+            if enabled_reactions:
+                await random.choice(enabled_reactions)(p)
             
-    async def lament_snowball(self):
+    async def lament_snowball(self, _):
         await self.room.send_xt('se', self.id, 4)
         
     async def throw_snowball_back(self, p):
@@ -96,12 +102,13 @@ class PenguinBot(Penguin):
         if not (p.room and p.room.id == self.room.id):
             return
         message_handlers = {
-            310: self.follow_penguin,
-            802: self.stop_following_penguin,
-            354: self.randomize_clothes,
-            410: self.random_move
+            310: (self.follow_penguin, self.plugin_config.get('enable_follow_mode', True)),
+            802: (self.stop_following_penguin, self.plugin_config.get('enable_follow_mode', True)),
+            354: (self.randomize_clothes, self.plugin_config.get('enable_random_clothing', True)),
+            410: (self.random_move, self.plugin_config.get('enable_random_movement_on_demand', True))
         }
-        handler = message_handlers.get(message_id)
+        enabled_handlers = {k: f for k, (f, e) in message_handlers.items() if e}
+        handler = enabled_handlers.get(message_id)
         if handler:
             if len(signature(handler).parameters) > 0:
                 return await handler(p)
@@ -119,7 +126,8 @@ class PenguinBot(Penguin):
         self.following_penguin = None
         await self.room.send_xt('ss', self.id, 212)
         await asyncio.sleep(2)
-        await self.join_room(self.server.rooms[random.choice(self.room_ids)])
+        await self.join_room(
+            self.server.rooms[random.choice(self.plugin_config.get('bot_rooms', self.default_room_ids))])
     
     async def randomize_clothes(self):
         self.color = random.randrange(2, 14)

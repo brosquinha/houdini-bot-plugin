@@ -26,3 +26,4 @@ var/
 *.egg
 
 .vscode/
+bot/config.json

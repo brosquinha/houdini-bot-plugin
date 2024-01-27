@@ -1,0 +1,17 @@
+{
+    "spawn_rooms": [100, 110, 111, 120, 121, 122, 130, 300],
+    "bot_rooms": [
+        100, 110, 111, 120, 121, 130, 300, 310, 320, 330, 340, 200, 220,
+        230, 801, 802, 800, 400, 410, 411, 809, 805, 810, 806, 808, 807
+    ],
+    "bot_penguin_ids": [104, 105],
+    "salute_messages": [101, 151],
+    "enable_random_movement": true,
+    "enable_random_frame": true,
+    "enable_random_clothing": true,
+    "enable_salute": true,
+    "enable_snowball_lament": true,
+    "enable_snowball_throwback": true,
+    "enable_follow_mode": true,
+    "enable_random_movement_on_demand": true
+}
