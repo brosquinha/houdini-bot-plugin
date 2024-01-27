@@ -1,6 +1,7 @@
 import asyncio
 import logging
 import random
+from inspect import signature
 
 import houdini.data.penguin
 from houdini import handlers
@@ -41,11 +42,11 @@ class BotPlugin(IPlugin):
         
     @handlers.handler(XTPacket('j', 'jr'))
     async def salute(self, p, room: Room, *_):
-        await asyncio.gather(*(bot.salute(p, room) for bot in self.bots))
+        await asyncio.gather(*(bot.handle_join_room(p, room) for bot in self.bots))
 
     @handlers.handler(XTPacket('u', 'sb'))
     async def lament_snowball(self, p, x: int, y: int):
-        await asyncio.gather(*(bot.lament_snowball(p, x, y) for bot in self.bots))
+        await asyncio.gather(*(bot.handle_snowball(p, x, y) for bot in self.bots))
         
     @handlers.handler(XTPacket('u', 'ss'))
     async def handle_safe_message(self, p, message_id: int):
@@ -89,7 +90,7 @@ class PenguinBot(Penguin):
     async def load(self):
         self.penguin_data = await houdini.data.penguin.Penguin.get(self.penguin_id)
         self.update(**self.penguin_data.to_dict())
-        self.randomize_clothes()
+        await self.randomize_clothes()
         self.randomize_position()
         
     def begin_activity(self):
@@ -97,42 +98,75 @@ class PenguinBot(Penguin):
         
     async def activity_loop(self):
         while True:
-            await asyncio.sleep(5)
-            self.frame = max(self.frame + 1, 18) if self.frame < 26 else 18
-            await self.room.send_xt('sf', self.id, self.frame)
-            await asyncio.sleep(5)
-            self.x = random.choice(range(190, 530))
-            self.y = random.choice(range(300, 450))
-            await self.room.send_xt('sp', self.id, self.x, self.y)
+            await asyncio.sleep(random.choice(range(5, 16)))
+            await self.random_frame()
+            await asyncio.sleep(random.choice(range(5, 16)))
+            await self.random_move()
             
-    async def salute(self, p, room: Room):
+    async def random_frame(self):
+        self.frame = random.choice(range(18, 26))
+        await self.room.send_xt('sf', self.id, self.frame)
+            
+    async def random_move(self):
+        self.randomize_position()
+        await self.room.send_xt('sp', self.id, self.x, self.y)
+            
+    async def handle_join_room(self, p, room: Room):
         if self.following_penguin and p.id == self.following_penguin.id:
             await self.join_room(room)
         elif room.id == self.room.id:
-            await asyncio.sleep(3)
-            await self.room.send_xt('ss', self.id, 101)
-            await asyncio.sleep(3)
-            await self.room.send_xt('ss', self.id, 151)
+            await self.salute()
+    
+    async def salute(self):
+        await asyncio.sleep(3)
+        await self.room.send_xt('ss', self.id, 101)
+        await asyncio.sleep(3)
+        await self.room.send_xt('ss', self.id, 151)
             
-    async def lament_snowball(self, p, x: int, y: int):
+    async def handle_snowball(self, p, x: int, y: int):
         if (x in range(self.x - self.snowball_margin, self.x + self.snowball_margin) and
             y in range(self.y - self.snowball_margin, self.y + self.snowball_margin)):
             await asyncio.sleep(1)
-            await self.room.send_xt('se', self.id, 4)
+            if random.random() > 0.5:
+                return await self.lament_snowball()
+            await self.throw_snowball_back(p)
+            
+    async def lament_snowball(self):
+        await self.room.send_xt('se', self.id, 4)
+        
+    async def throw_snowball_back(self, p):
+        await self.room.send_xt('sb', self.id, p.x, p.y)
             
     async def handle_safe_message(self, p, message_id: int):
         if not (p.room and p.room.id == self.room.id):
             return
-        if message_id == 310 and self.following_penguin is None:
-            self.following_penguin = p
-            await self.room.send_xt('ss', self.id, 22)
-        if message_id == 802 and self.following_penguin is not None:
-            self.following_penguin = None
-            await self.room.send_xt('ss', self.id, 212)
-            await asyncio.sleep(2)
-            await self.join_room(self.server.rooms[random.choice(self.room_ids)])
+        message_handlers = {
+            310: self.follow_penguin,
+            802: self.stop_following_penguin,
+            354: self.randomize_clothes,
+            410: self.random_move
+        }
+        handler = message_handlers.get(message_id)
+        if handler:
+            if len(signature(handler).parameters) > 0:
+                return await handler(p)
+            await handler()
+            
+    async def follow_penguin(self, p):
+        if self.following_penguin is not None:
+            return
+        self.following_penguin = p
+        await self.room.send_xt('ss', self.id, 22)
     
-    def randomize_clothes(self):
+    async def stop_following_penguin(self):
+        if self.following_penguin is None:
+            return
+        self.following_penguin = None
+        await self.room.send_xt('ss', self.id, 212)
+        await asyncio.sleep(2)
+        await self.join_room(self.server.rooms[random.choice(self.room_ids)])
+    
+    async def randomize_clothes(self):
         self.color = random.randrange(2, 14)
         self.head = random.choice(self._head_ids)
         self.face = random.choice(self._face_ids)
@@ -142,6 +176,16 @@ class PenguinBot(Penguin):
         self.feet = random.choice(self._feet_ids)
         self.flag = random.choice(self._flag_ids)
         self.photo = random.choice(self._photo_ids)
+        if self.room:
+            await self.room.send_xt('upc', self.id, self.color)
+            await self.room.send_xt('uph', self.id, self.head)
+            await self.room.send_xt('upf', self.id, self.face)
+            await self.room.send_xt('upn', self.id, self.neck)
+            await self.room.send_xt('upb', self.id, self.body)
+            await self.room.send_xt('upa', self.id, self.hand)
+            await self.room.send_xt('upe', self.id, self.feet)
+            await self.room.send_xt('upl', self.id, self.flag)
+            await self.room.send_xt('upp', self.id, self.photo)
         
     def randomize_position(self):
         self.x = random.choice(range(190, 530))
