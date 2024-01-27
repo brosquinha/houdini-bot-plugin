@@ -6,6 +6,7 @@ import houdini.data.penguin
 from houdini.data.room import Room
 from houdini.penguin import Penguin
 from houdini.plugins.bot.fake_writer import FakeWriter
+from houdini.plugins.bot import safe_messages
 
 
 class PenguinBot(Penguin):
@@ -15,7 +16,7 @@ class PenguinBot(Penguin):
         100, 110, 111, 120, 121, 130, 300, 310, 320, 330, 340, 200, 220,
         230, 801, 802, 800, 400, 410, 411, 809, 805, 810, 806, 808, 807
     ]
-    default_salute_messages = [101, 151]
+    default_salute_messages = [safe_messages.HI_THERE, safe_messages.HOW_U_DOING]
     valid_frames = range(18, 26)
     activity_sleep_range = range(5, 16)
     
@@ -102,10 +103,10 @@ class PenguinBot(Penguin):
         if not (p.room and p.room.id == self.room.id):
             return
         message_handlers = {
-            310: (self.follow_penguin, self.plugin_config.get('enable_follow_mode', True)),
-            802: (self.stop_following_penguin, self.plugin_config.get('enable_follow_mode', True)),
-            354: (self.randomize_clothes, self.plugin_config.get('enable_random_clothing', True)),
-            410: (self.random_move, self.plugin_config.get('enable_random_movement_on_demand', True))
+            safe_messages.FOLLOW_ME: (self.follow_penguin, self.plugin_config.get('enable_follow_mode', True)),
+            safe_messages.GO_AWAY: (self.stop_following_penguin, self.plugin_config.get('enable_follow_mode', True)),
+            safe_messages.U_ARE_SILLY: (self.randomize_clothes, self.plugin_config.get('enable_random_clothing', True)),
+            safe_messages.WHERE: (self.random_move, self.plugin_config.get('enable_random_movement_on_demand', True))
         }
         enabled_handlers = {k: f for k, (f, e) in message_handlers.items() if e}
         handler = enabled_handlers.get(message_id)
@@ -118,13 +119,13 @@ class PenguinBot(Penguin):
         if self.following_penguin is not None:
             return
         self.following_penguin = p
-        await self.room.send_xt('ss', self.id, 22)
+        await self.room.send_xt('ss', self.id, safe_messages.OK)
     
     async def stop_following_penguin(self):
         if self.following_penguin is None:
             return
         self.following_penguin = None
-        await self.room.send_xt('ss', self.id, 212)
+        await self.room.send_xt('ss', self.id, safe_messages.SEE_U_LATER)
         await asyncio.sleep(2)
         await self.join_room(
             self.server.rooms[random.choice(self.plugin_config.get('bot_rooms', self.default_room_ids))])
