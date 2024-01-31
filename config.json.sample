@@ -1,15 +1,26 @@
 {
-    "spawn_rooms": [100, 110, 111, 120, 121, 122, 130, 300],
+    "dash_static_key": "houdini",
+    "room_weights": {
+        "100": 5, "130": 3, "230": 3, "300": 3,
+        "400": 3, "800": 3, "809": 3, "120": 3
+    },
     "bot_rooms": [
         100, 110, 111, 120, 121, 130, 300, 310, 320, 330, 340, 200, 220,
         230, 801, 802, 800, 400, 410, 411, 809, 805, 810, 806, 808, 807
     ],
-    "bot_penguin_ids": [104, 105],
-    "salute_messages": [101, 151],
+    "bot_population": 100,
+    "bot_penguin_ids": [105],
+    "bot_penguin_email_domain": "localhost",
+    "bot_penguin_default_password": null,
+    "bot_penguin_default_inventory": true,
+    "greeting_messages": [101, 151],
+    "interaction_distance": 75000,
+    "random_clothing_on_startup": true,
     "enable_random_movement": true,
     "enable_random_frame": true,
+    "enable_random_room_movement": true,
     "enable_random_clothing": true,
-    "enable_salute": true,
+    "enable_greeting": true,
     "enable_snowball_lament": true,
     "enable_snowball_throwback": true,
     "enable_follow_mode": true,
