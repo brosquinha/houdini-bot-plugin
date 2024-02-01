@@ -17,7 +17,7 @@ class PenguinBot(Penguin):
     snowball_margin = 25
     default_greeting_messages = [SAFE_MESSAGES.HI_THERE, SAFE_MESSAGES.HOW_U_DOING]
     default_interaction_distance = 50000
-    valid_frames = range(18, 26)
+    valid_frames = range(18, 27)
     activity_cycle_range = range(10, 30)
     activity_sleep_range = range(5, 16)
     
@@ -30,6 +30,7 @@ class PenguinBot(Penguin):
         self.following_penguin = None
         
         self.frame = 18
+        self._activity_task = None
         
         super().__init__(self.server, None, FakeWriter())
         
@@ -38,12 +39,20 @@ class PenguinBot(Penguin):
         return self
         
     async def init(self):
+        self.server.penguins_by_id[self.id] = self
+        self.server.penguins_by_username[self.username] = self
+
+        if self.character is not None:
+            self.server.penguins_by_character_id[self.character] = self
+        
         self.randomize_position()
         if self.plugin_config.get('random_clothing_on_startup', True):
             await self.randomize_clothes()
+        elif self.plugin_config.get('no_clothing', False):
+            self.reset_clothes()
         
     def begin_activity(self):
-        asyncio.create_task(self.activity_loop())
+        self._activity_task = asyncio.create_task(self.activity_loop())
         
     async def activity_loop(self):
         while True:
@@ -124,6 +133,17 @@ class PenguinBot(Penguin):
         await self.room.send_xt('ss', self.id, SAFE_MESSAGES.SEE_U_LATER)
         await asyncio.sleep(2)
         await self.move_to_random_room()
+        
+    async def disconnect(self):
+        del self.server.penguins_by_id[self.id]
+        del self.server.penguins_by_username[self.username]
+
+        if self.character in self.server.penguins_by_character_id:
+            del self.server.penguins_by_character_id[self.character]
+            
+        await self.room.remove_penguin(self)
+        self._activity_task.cancel()
+        self.server.logger.info(f'{self.username} disconnected')
     
     def is_player_close(self, p) -> bool:
         return abs(self.x**2 - p.x**2) + abs(self.y**2 - p.y**2) < self.plugin_config.get(
@@ -149,6 +169,16 @@ class PenguinBot(Penguin):
             await self.room.send_xt('upe', self.id, self.feet)
             await self.room.send_xt('upl', self.id, self.flag)
             await self.room.send_xt('upp', self.id, self.photo)
+            
+    def reset_clothes(self):
+        self.head = None
+        self.face = None
+        self.neck = None
+        self.body = None
+        self.hand = None
+        self.feet = None
+        self.flag = None
+        self.photo = None
         
     def randomize_position(self):
         self.x = random.choice(range(190, 530))

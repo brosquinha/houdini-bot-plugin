@@ -31,7 +31,8 @@ class BotPlugin(IPlugin):
         100, 110, 111, 120, 121, 130, 300, 310, 320, 330, 340, 200, 220,
         230, 801, 802, 800, 400, 410, 411, 809, 805, 810, 806, 808, 807
     ]
-    max_bot_population = 500
+    max_bot_population = 200
+    bot_rotation_range = range(60, 180)
 
     def __init__(self, server: Houdini):
         self.server = server
@@ -48,14 +49,16 @@ class BotPlugin(IPlugin):
     async def ready(self):
         # quick debugging
         # import logging; self.server.logger.setLevel(logging.DEBUG)
+        if self.server.config.type != 'world':
+            return
         self.server.logger.info("Bot plugin loaded")
         bot_population = self.plugin_config.get('bot_population')
         existing_bot_ids = await PenguinAttribute.select('penguin_id').where(PenguinAttribute.name == "bot").gino.all()
         existing_bot_ids = [x[0] for x in existing_bot_ids]
-        existing_penguin_bots = await Penguin.query.where(Penguin.id.in_(existing_bot_ids)).gino.all()
+        self.existing_penguin_bots = await Penguin.query.where(Penguin.id.in_(existing_bot_ids)).gino.all()
         set_bot_ids = self.plugin_config.get('bot_penguin_ids', [])
         penguin_bots = await Penguin.query.where(Penguin.id.in_(set_bot_ids)).gino.all()
-        penguin_bots += random.choices(existing_penguin_bots, k=min(bot_population, len(existing_penguin_bots)))
+        penguin_bots += random.sample(self.existing_penguin_bots, min(bot_population, len(self.existing_penguin_bots)))
         
         if bot_population and bot_population > self.max_bot_population:
             self.server.logger.warn(f'Bot population was set too large, defaulting to max value of {self.max_bot_population}')
@@ -73,6 +76,11 @@ class BotPlugin(IPlugin):
             await bot.init()
             await bot.move_to_random_room()
             bot.begin_activity()
+        await self.server.redis.hset('houdini.population', self.server.config.id, len(self.server.penguins_by_id))
+        self.server.logger.info(f'Server {self.server.config.id} population: {len(self.server.penguins_by_id)}')
+        
+        if self.plugin_config.get('bot_rotation', True):
+            asyncio.create_task(self.bot_rotation())
             
     async def create_penguin_bots(self, population: int):
         random_names = await self._get_random_names()
@@ -146,6 +154,19 @@ class BotPlugin(IPlugin):
         
         return response
         
+    async def bot_rotation(self):
+        while True:
+            await asyncio.sleep(random.choice(self.bot_rotation_range))
+            incoming_bot = random.choice([x for x in self.existing_penguin_bots if x.id not in self.server.penguins_by_id])
+            incoming_bot = PenguinBot(incoming_bot.id, self).load_data(incoming_bot)
+            rotated_bot = random.choice(self.bots)
+            self.bots = [x for x in self.bots if x.id != rotated_bot.id]
+            await rotated_bot.disconnect()
+            await incoming_bot.init()
+            await incoming_bot.move_to_random_room()
+            incoming_bot.begin_activity()
+            self.bots.append(incoming_bot)
+    
     @handlers.handler(XTPacket('j', 'jr'))
     async def handle_join_room(self, p, room: Room, *_):
         await asyncio.gather(*(bot.handle_join_room(p, room) for bot in self.bots))
