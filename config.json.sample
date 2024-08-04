@@ -8,6 +8,7 @@
         100, 110, 111, 120, 121, 130, 300, 310, 320, 330, 340, 200, 220,
         230, 801, 802, 800, 400, 410, 411, 809, 805, 810, 806, 808, 807
     ],
+    "bot_waddles": [100, 101, 102, 103],
     "bot_population": 100,
     "bot_penguin_ids": [105],
     "bot_penguin_email_domain": "localhost",
@@ -15,6 +16,7 @@
     "bot_penguin_default_inventory": true,
     "greeting_messages": [101, 151],
     "interaction_distance": 75000,
+    "waddle_join_delay": 10,
     "random_clothing_on_startup": true,
     "enable_random_movement": true,
     "enable_random_frame": true,

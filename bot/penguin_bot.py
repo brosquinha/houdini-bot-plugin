@@ -6,10 +6,11 @@ from inspect import signature
 from typing import List, Tuple, TYPE_CHECKING
 
 import houdini.data.penguin
-from houdini.data.room import Room
+from houdini.data.room import Room, RoomWaddle
 from houdini.penguin import Penguin
 from houdini.plugins.bot.fake_writer import FakeWriter
 from houdini.plugins.bot.constants import ITEM_TYPE, ROOM_AREAS, SAFE_MESSAGES
+from houdini.plugins.bot.games import SledRacing
 if TYPE_CHECKING:
     from houdini.plugins.bot.bot_plugin import BotPlugin
 
@@ -205,3 +206,25 @@ class PenguinBot(Penguin):
         room_weights = [set_room_weights.get(str(x), 1) for x in available_rooms]
         await self.join_room(
             self.bot_plugin.server.rooms[random.choices(available_rooms, weights=room_weights)[0]])
+        
+    async def join_game(self, target_penguin: Penguin, waddle: RoomWaddle):
+        if waddle.id in self.plugin_config.get('bot_waddles', self.bot_plugin.default_waddle_ids):
+            asyncio.create_task(self.play_game(target_penguin, waddle))
+        
+    async def play_game(self, target_penguin: Penguin, waddle: RoomWaddle):
+        self.server.logger.info(f'{self.username} scheduled to join waddle {waddle.id}')
+        await asyncio.sleep(self.plugin_config.get('waddle_join_delay', self.bot_plugin.default_waddle_join_delay))
+        
+        if target_penguin.waddle != waddle:
+            self.server.logger.info(f"Penguin {target_penguin.username} no longer on waddle room, aborting...")
+            return
+        
+        previous_room = self.room
+        await waddle.add_penguin(self)
+        
+        if waddle.game == 'sled':
+            game = SledRacing(self)
+            await game.play(waddle.id, random.choice(list(game.waddles[waddle.id].keys())))
+            
+        if previous_room:
+            await self.join_room(previous_room)

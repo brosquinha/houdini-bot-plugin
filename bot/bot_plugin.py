@@ -12,7 +12,7 @@ from houdini import handlers
 from houdini.data.item import PenguinItem
 from houdini.data.penguin import Penguin
 from houdini.data.plugin import PenguinAttribute
-from houdini.data.room import Room
+from houdini.data.room import Room, RoomWaddle
 from houdini.crypto import Crypto
 from houdini.handlers import XTPacket
 from houdini.houdini import Houdini
@@ -31,6 +31,8 @@ class BotPlugin(IPlugin):
         100, 110, 111, 120, 121, 130, 300, 310, 320, 330, 340, 200, 220,
         230, 801, 802, 800, 400, 410, 411, 809, 805, 810, 806, 808, 807
     ]
+    default_waddle_ids = [100, 101, 102, 103]
+    default_waddle_join_delay = 10
     max_bot_population = 200
     bot_rotation_range = range(60, 180)
 
@@ -176,3 +178,14 @@ class BotPlugin(IPlugin):
     @handlers.handler(XTPacket('u', 'ss'))
     async def handle_safe_message(self, p, message_id: int):
         await asyncio.gather(*(bot.handle_safe_message(p, message_id) for bot in self.bots))
+        
+    @handlers.handler(XTPacket('jw', ext='z'))
+    async def handle_join_waddle(self, p, waddle_id: int):
+        if waddle_id not in p.room.waddles:
+            return
+        waddle: RoomWaddle = p.room.waddles[waddle_id]
+        try:
+            chosen_players = random.sample(self.bots, waddle.seats - 1)
+            await asyncio.gather(*(bot.join_game(p, waddle) for bot in chosen_players))
+        except ValueError:
+            self.server.logger.error("Insufficient amount of bots for joining game")
