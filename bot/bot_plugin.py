@@ -74,7 +74,6 @@ class BotPlugin(IPlugin):
         self.bots = [PenguinBot(x.id, self).load_data(x) for x in penguin_bots]
         for bot in self.bots:
             await bot.init()
-            await bot.move_to_random_room()
             bot.begin_activity()
         await self.server.redis.hset('houdini.population', self.server.config.id, len(self.server.penguins_by_id))
         self.server.logger.info(f'Server {self.server.config.id} population: {len(self.server.penguins_by_id)}')
@@ -163,7 +162,6 @@ class BotPlugin(IPlugin):
             self.bots = [x for x in self.bots if x.id != rotated_bot.id]
             await rotated_bot.disconnect()
             await incoming_bot.init()
-            await incoming_bot.move_to_random_room()
             incoming_bot.begin_activity()
             self.bots.append(incoming_bot)
     

@@ -1,13 +1,15 @@
 import asyncio
+import itertools
+import math
 import random
 from inspect import signature
-from typing import TYPE_CHECKING
+from typing import List, Tuple, TYPE_CHECKING
 
 import houdini.data.penguin
 from houdini.data.room import Room
 from houdini.penguin import Penguin
 from houdini.plugins.bot.fake_writer import FakeWriter
-from houdini.plugins.bot.constants import ITEM_TYPE, SAFE_MESSAGES
+from houdini.plugins.bot.constants import ITEM_TYPE, ROOM_AREAS, SAFE_MESSAGES
 if TYPE_CHECKING:
     from houdini.plugins.bot.bot_plugin import BotPlugin
 
@@ -45,6 +47,7 @@ class PenguinBot(Penguin):
         if self.character is not None:
             self.server.penguins_by_character_id[self.character] = self
         
+        await self.move_to_random_room()
         self.randomize_position()
         if self.plugin_config.get('random_clothing_on_startup', True):
             await self.randomize_clothes()
@@ -181,8 +184,19 @@ class PenguinBot(Penguin):
         self.photo = None
         
     def randomize_position(self):
-        self.x = random.choice(range(190, 530))
-        self.y = random.choice(range(300, 450))
+        self.random_position_in_room(ROOM_AREAS[self.room.id])
+        
+    def random_position_in_room(self, points: List[Tuple[int, int]]):
+        triangles = [(points[0], a, b) for a, b in itertools.pairwise(points[1:])]
+        triangles_areas = [0.5 * (x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2)) for (x1, y1), (x2, y2), (x3, y3) in triangles]
+        (x1, y1), (x2, y2), (x3, y3) = random.choices(triangles, weights=triangles_areas)[0]
+        
+        r1 = random.random()
+        r2 = random.random()
+        s1 = math.sqrt(r1)
+        
+        self.x = int(x1 * (1.0 - s1) + x2 * (1.0 - r2) * s1 + x3 * r2 * s1)
+        self.y = int(y1 * (1.0 - s1) + y2 * (1.0 - r2) * s1 + y3 * r2 * s1)
         
     async def move_to_random_room(self):
         bot_rooms = self.plugin_config.get('bot_rooms', self.bot_plugin.default_room_ids)

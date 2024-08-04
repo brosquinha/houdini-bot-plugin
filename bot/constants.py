@@ -1,3 +1,4 @@
+from collections import defaultdict
 from dataclasses import dataclass
 
 @dataclass(frozen=True)
@@ -23,6 +24,9 @@ class ItemType:
     FLAG = 8
     PHOTO = 9
     AWARD = 10
+    
+ROOM_AREAS = defaultdict(lambda: [(190, 300), (530, 300), (530, 450), (190, 450)])
+ROOM_AREAS[100] = [(135, 340), (165, 280), (306, 203), (457, 210), (573, 283), (635, 360), (605, 405), (180, 410)]
 
 SAFE_MESSAGES = SafeMessages()
 ITEM_TYPE = ItemType()
