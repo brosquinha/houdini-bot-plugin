@@ -27,3 +27,4 @@ var/
 
 .vscode/
 bot/config.json
+playable_area.*

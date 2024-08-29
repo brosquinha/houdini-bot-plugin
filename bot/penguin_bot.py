@@ -189,7 +189,7 @@ class PenguinBot(Penguin):
         
     def random_position_in_room(self, points: List[Tuple[int, int]]):
         triangles = [(points[0], a, b) for a, b in itertools.pairwise(points[1:])]
-        triangles_areas = [0.5 * (x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2)) for (x1, y1), (x2, y2), (x3, y3) in triangles]
+        triangles_areas = [0.5 * abs(x1 * (y2 - y3) + x2 * (y3 - y1) + x3 * (y1 - y2)) for (x1, y1), (x2, y2), (x3, y3) in triangles]
         (x1, y1), (x2, y2), (x3, y3) = random.choices(triangles, weights=triangles_areas)[0]
         
         r1 = random.random()
