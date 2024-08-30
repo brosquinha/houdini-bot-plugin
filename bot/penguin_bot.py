@@ -9,7 +9,7 @@ import houdini.data.penguin
 from houdini.data.room import Room, RoomWaddle
 from houdini.penguin import Penguin
 from houdini.plugins.bot.fake_writer import FakeWriter
-from houdini.plugins.bot.constants import ITEM_TYPE, ROOM_AREAS, SAFE_MESSAGES
+from houdini.plugins.bot.constants import ITEM_TYPE, ROOM_AREAS, ROOM_SPOTS, SAFE_MESSAGES, RoomSpot, RoomSpotsController
 from houdini.plugins.bot.games import SledRacing
 if TYPE_CHECKING:
     from houdini.plugins.bot.bot_plugin import BotPlugin
@@ -18,11 +18,15 @@ if TYPE_CHECKING:
 class PenguinBot(Penguin):
     
     snowball_margin = 25
+    movement_speed = 75
     default_greeting_messages = [SAFE_MESSAGES.HI_THERE, SAFE_MESSAGES.HOW_U_DOING]
-    default_interaction_distance = 50000
+    default_interaction_distance = 100
+    default_spot_distance = 10
+    default_max_spot_prob = 0.75
     valid_frames = range(18, 27)
     activity_cycle_range = range(10, 30)
     activity_sleep_range = range(5, 16)
+    spot_sleep_range = range(30, 120)
     
     def __init__(self, penguin_id: str, bot_plugin: 'BotPlugin'):
         self.penguin_id = penguin_id
@@ -61,6 +65,8 @@ class PenguinBot(Penguin):
     async def activity_loop(self):
         while True:
             for _ in range(random.choice(self.activity_cycle_range)):
+                if self.plugin_config.get('enable_room_spots', True):
+                    await self.move_to_spot()
                 if self.plugin_config.get('enable_random_frame', True):
                     await asyncio.sleep(random.choice(self.activity_sleep_range))
                     await self.random_frame()
@@ -71,6 +77,41 @@ class PenguinBot(Penguin):
                 await asyncio.sleep(random.choice(self.activity_sleep_range))
                 await self.move_to_random_room()  
             
+    async def move_to_spot(self):
+        spots_controller = ROOM_SPOTS[self.room.id]
+        max_spot_prob = self.plugin_config.get("spot_max_probability", self.default_max_spot_prob)
+        if random.random() > min(spots_controller.len_spots() / 3, max_spot_prob):
+            return
+        with PenguinBotRoomSpots(spots_controller, self) as spot:
+            position_already_taken = False
+            for penguin in self.room.penguins_by_id.values():
+                spot_distance = self.plugin_config.get('spot_distance', self.default_spot_distance)
+                penguin_distance = math.dist(spot.position, (penguin.x, penguin.y))
+                if not isinstance(penguin, self.__class__) and penguin_distance <= spot_distance:
+                    position_already_taken = True
+                    break
+            
+            if not position_already_taken:
+                distance = math.dist((self.x, self.y), spot.position)
+                self.x, self.y = spot.position
+                self.frame = spot.frame
+                await self.room.send_xt('sp', self.id, self.x, self.y)
+                if spot.clothes:
+                    self.head = spot.clothes.get(ITEM_TYPE.HEAD, 0)
+                    self.face = spot.clothes.get(ITEM_TYPE.FACE, 0)
+                    self.neck = spot.clothes.get(ITEM_TYPE.NECK, 0)
+                    self.body = spot.clothes.get(ITEM_TYPE.BODY, 0)
+                    self.hand = spot.clothes.get(ITEM_TYPE.HAND, 0)
+                    self.feet = spot.clothes.get(ITEM_TYPE.FEET, 0)
+                    await self.sync_clothes()
+                await asyncio.sleep(distance / self.movement_speed + 2)
+                await self.room.send_xt('sf', self.id, self.frame)
+                
+            await asyncio.sleep(random.choice(self.spot_sleep_range))
+            
+        await self.random_move()
+        await self.sync_clothes()
+    
     async def random_frame(self):
         self.frame = random.choice(self.valid_frames)
         await self.room.send_xt('sf', self.id, self.frame)
@@ -150,7 +191,7 @@ class PenguinBot(Penguin):
         self.server.logger.info(f'{self.username} disconnected')
     
     def is_player_close(self, p) -> bool:
-        return abs(self.x**2 - p.x**2) + abs(self.y**2 - p.y**2) < self.plugin_config.get(
+        return math.dist((self.x, self.y), (p.x, p.y)) < self.plugin_config.get(
             'interaction_distance', self.default_interaction_distance)
     
     async def randomize_clothes(self):
@@ -163,16 +204,20 @@ class PenguinBot(Penguin):
         self.feet = random.choice(self.bot_plugin.items_by_type[ITEM_TYPE.FEET]).id
         self.flag = random.choice(self.bot_plugin.items_by_type[ITEM_TYPE.FLAG]).id
         self.photo = random.choice(self.bot_plugin.items_by_type[ITEM_TYPE.PHOTO]).id
-        if self.room:
-            await self.room.send_xt('upc', self.id, self.color)
-            await self.room.send_xt('uph', self.id, self.head)
-            await self.room.send_xt('upf', self.id, self.face)
-            await self.room.send_xt('upn', self.id, self.neck)
-            await self.room.send_xt('upb', self.id, self.body)
-            await self.room.send_xt('upa', self.id, self.hand)
-            await self.room.send_xt('upe', self.id, self.feet)
-            await self.room.send_xt('upl', self.id, self.flag)
-            await self.room.send_xt('upp', self.id, self.photo)
+        await self.sync_clothes()
+            
+    async def sync_clothes(self):
+        if not self.room:
+            return
+        await self.room.send_xt('upc', self.id, self.color)
+        await self.room.send_xt('uph', self.id, self.head)
+        await self.room.send_xt('upf', self.id, self.face)
+        await self.room.send_xt('upn', self.id, self.neck)
+        await self.room.send_xt('upb', self.id, self.body)
+        await self.room.send_xt('upa', self.id, self.hand)
+        await self.room.send_xt('upe', self.id, self.feet)
+        await self.room.send_xt('upl', self.id, self.flag)
+        await self.room.send_xt('upp', self.id, self.photo)
             
     def reset_clothes(self):
         self.head = None
@@ -228,3 +273,34 @@ class PenguinBot(Penguin):
             
         if previous_room:
             await self.join_room(previous_room)
+
+
+class PenguinBotRoomSpots:
+    spot: RoomSpot
+    bot: 'PenguinBot'
+    
+    def __init__(self, spots_controller: RoomSpotsController, penguin_bot: 'PenguinBot') -> None:
+        self.controller = spots_controller
+        self.bot = penguin_bot
+        self.clothes = {}
+        
+    def __enter__(self):
+        self.spot = next(x.pop(0) for x in self.controller.spots if x)
+        self.clothes = {
+            ITEM_TYPE.HEAD: self.bot.head,
+            ITEM_TYPE.FACE: self.bot.face,
+            ITEM_TYPE.NECK: self.bot.neck,
+            ITEM_TYPE.BODY: self.bot.body,
+            ITEM_TYPE.HAND: self.bot.hand,
+            ITEM_TYPE.FEET: self.bot.feet,
+        }
+        return self.spot
+    
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        self.bot.head = self.clothes[ITEM_TYPE.HEAD]
+        self.bot.face = self.clothes[ITEM_TYPE.FACE]
+        self.bot.neck = self.clothes[ITEM_TYPE.NECK]
+        self.bot.body = self.clothes[ITEM_TYPE.BODY]
+        self.bot.hand = self.clothes[ITEM_TYPE.HAND]
+        self.bot.feet = self.clothes[ITEM_TYPE.FEET]
+        self.controller.spots[self.spot.priority - 1].append(self.spot)

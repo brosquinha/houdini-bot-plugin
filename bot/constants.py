@@ -1,5 +1,7 @@
+import itertools
 from collections import defaultdict
 from dataclasses import dataclass
+from typing import Tuple
 
 @dataclass(frozen=True)
 class SafeMessages:
@@ -25,6 +27,21 @@ class ItemType:
     PHOTO = 9
     AWARD = 10
     
+@dataclass
+class RoomSpot:
+    position: Tuple[float, float]
+    frame: int
+    priority: int
+    clothes: dict[int, int] | None = None
+    
+class RoomSpotsController:
+    def __init__(self, spots: list['RoomSpot']) -> None:
+        self.spots: list[list['RoomSpot']] = [list(x) for _, x in itertools.groupby(spots, key=lambda x: x.priority)]
+        self.total = self.len_spots()
+        
+    def len_spots(self) -> int:
+        return len([y for x in self.spots for y in x])
+        
 ROOM_AREAS = defaultdict(lambda: [(190, 300), (530, 300), (530, 450), (190, 450)])
 ROOM_AREAS[100] = [(135, 340), (165, 280), (306, 203), (457, 210), (573, 283), (635, 360), (605, 405), (180, 410)]
 ROOM_AREAS[110] = [(501.0, 258.0), (445.25, 184.55), (202.15, 188.45), (162.6, 201.4), (88.85, 257.8), (0.0, 370.5), (0.0, 480.0), (668.0, 481.0)]
@@ -61,3 +78,9 @@ ROOM_AREAS[422] = [(155.0, 310.0), (55.0, 349.0), (0.0, 408.85), (0.0, 480.0), (
 
 SAFE_MESSAGES = SafeMessages()
 ITEM_TYPE = ItemType()
+
+ROOM_SPOTS = defaultdict(lambda: RoomSpotsController([]))
+ROOM_SPOTS[110] = RoomSpotsController([RoomSpot(position=(255, 188), frame=17, priority=1), RoomSpot(position=(124, 241), frame=24, priority=1), RoomSpot(position=(274, 250), frame=26, priority=2, clothes={ITEM_TYPE.BODY: 262}), RoomSpot(position=(224, 291), frame=26, priority=3, clothes={ITEM_TYPE.BODY: 262}), RoomSpot(position=(216, 190), frame=17, priority=3), RoomSpot(position=(294, 186), frame=17, priority=3), RoomSpot(position=(103, 262), frame=24, priority=3)])
+ROOM_SPOTS[330] = RoomSpotsController([RoomSpot(position=(346, 368), frame=24, priority=1), RoomSpot(position=(383, 331), frame=26, priority=2, clothes={ITEM_TYPE.BODY: 263, ITEM_TYPE.HEAD: 424}), RoomSpot(position=(420, 365), frame=18, priority=2), RoomSpot(position=(207, 309), frame=24, priority=2), RoomSpot(position=(247, 283), frame=26, priority=3, clothes={ITEM_TYPE.BODY: 263, ITEM_TYPE.HEAD: 424}), RoomSpot(position=(285, 309), frame=18, priority=3), RoomSpot(position=(493, 351), frame=24, priority=3), RoomSpot(position=(574, 349), frame=18, priority=3), RoomSpot(position=(529, 316), frame=26, priority=4, clothes={ITEM_TYPE.BODY: 263, ITEM_TYPE.HEAD: 424}), RoomSpot(position=(551, 212), frame=26, priority=4, clothes={ITEM_TYPE.HAND: 343})])
+ROOM_SPOTS[410] = RoomSpotsController([RoomSpot(position=(87, 225), frame=26, priority=1, clothes={ITEM_TYPE.HAND: 340}), RoomSpot(position=(132, 313), frame=26, priority=1, clothes={ITEM_TYPE.HAND: 233}), RoomSpot(position=(48, 326), frame=26, priority=1, clothes={ITEM_TYPE.HAND: 234}), RoomSpot(position=(104, 354), frame=26, priority=1, clothes={ITEM_TYPE.BODY: 293}), RoomSpot(position=(185, 389), frame=22, priority=1), RoomSpot(position=(367, 324), frame=19, priority=2), RoomSpot(position=(185, 389), frame=22, priority=2), RoomSpot(position=(462, 335), frame=22, priority=2)])
+ROOM_SPOTS[810] = RoomSpotsController([RoomSpot(position=(296, 265), frame=18, priority=1), RoomSpot(position=(260, 252), frame=18, priority=1), RoomSpot(position=(448, 391), frame=26, priority=1, clothes={ITEM_TYPE.HAND: 325}), RoomSpot(position=(563, 380), frame=26, priority=1, clothes={ITEM_TYPE.HAND: 325}), RoomSpot(position=(337, 141), frame=17, priority=2), RoomSpot(position=(136, 265), frame=24, priority=2), RoomSpot(position=(137, 355), frame=22, priority=2)])
