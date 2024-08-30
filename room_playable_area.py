@@ -96,7 +96,7 @@ def main(filename: str, iteractive: bool=False):
 if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument("room_file_path")
-    parser.add_argument("--iteractive", "-i", action='store_true')
+    parser.add_argument("--iteractive", "-i", action='store_true', help="Enter edited SVG path using a tool like https://yqnn.github.io/svg-path-editor/")
     args = parser.parse_args()
     
     main(args.room_file_path, iteractive=args.iteractive)
