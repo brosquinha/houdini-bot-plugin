@@ -33,8 +33,11 @@ class BotPlugin(IPlugin):
     ]
     default_waddle_ids = [100, 101, 102, 103]
     default_waddle_join_delay = 10
+    default_bot_open_igloos = 15
+    default_bot_throwing_igloo_party = 5
     max_bot_population = 200
     bot_rotation_range = range(60, 180)
+    bot_igloo_rotation_range = range(1200, 2400)
 
     def __init__(self, server: Houdini):
         self.server = server
@@ -82,6 +85,9 @@ class BotPlugin(IPlugin):
         
         if self.plugin_config.get('bot_rotation', True):
             asyncio.create_task(self.bot_rotation())
+            
+        if self.plugin_config.get('bot_igloo_rotation', True):
+            asyncio.create_task(self.bot_igloo_rotation())
             
     async def create_penguin_bots(self, population: int):
         random_names = await self._get_random_names()
@@ -166,6 +172,25 @@ class BotPlugin(IPlugin):
             await incoming_bot.init()
             incoming_bot.begin_activity()
             self.bots.append(incoming_bot)
+            
+    async def bot_igloo_rotation(self):
+        while True:
+            open_bots = random.sample(self.bots, min(
+                self.plugin_config.get('bot_open_igloos', self.default_bot_open_igloos), len(self.bots)))
+            party_bots = random.sample(open_bots, min(
+                self.plugin_config.get('bot_throwing_igloo_party', self.default_bot_throwing_igloo_party), len(open_bots)))
+            for bot in open_bots:
+                await bot.open_igloo()
+            for bot in party_bots:
+                self.server.logger.info(f'{bot.username} is throwing an igloo party')
+                bot.throwing_igloo_party = True
+            
+            await asyncio.sleep(random.choice(self.bot_igloo_rotation_range))
+            
+            for bot in open_bots:
+                bot.close_igloo()
+            for bot in party_bots:
+                bot.throwing_igloo_party = False
     
     @handlers.handler(XTPacket('j', 'jr'))
     async def handle_join_room(self, p, room: Room, *_):

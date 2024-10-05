@@ -6,7 +6,8 @@ from inspect import signature
 from typing import List, Tuple, TYPE_CHECKING
 
 import houdini.data.penguin
-from houdini.data.room import Room, RoomWaddle
+from houdini.data.room import Room, RoomWaddle, PenguinIglooRoomCollection
+from houdini.handlers.play.igloo import create_first_igloo
 from houdini.penguin import Penguin
 from houdini.plugins.bot.fake_writer import FakeWriter
 from houdini.plugins.bot.constants import ITEM_TYPE, ROOM_AREAS, ROOM_SPOTS, SAFE_MESSAGES, RoomSpot, RoomSpotsController
@@ -23,6 +24,8 @@ class PenguinBot(Penguin):
     default_interaction_distance = 100
     default_spot_distance = 10
     default_max_spot_prob = 0.75
+    default_igloo_room_weight = 0.5
+    default_partying_igloo_room_weight = 2
     valid_frames = range(18, 27)
     activity_cycle_range = range(10, 30)
     activity_sleep_range = range(5, 16)
@@ -35,6 +38,7 @@ class PenguinBot(Penguin):
         self.server = bot_plugin.server
         self.penguin_data = None
         self.following_penguin = None
+        self.throwing_igloo_party = False
         
         self.frame = 18
         self._activity_task = None
@@ -58,13 +62,15 @@ class PenguinBot(Penguin):
             await self.randomize_clothes()
         elif self.plugin_config.get('no_clothing', False):
             self.reset_clothes()
-        
+            
     def begin_activity(self):
         self._activity_task = asyncio.create_task(self.activity_loop())
         
     async def activity_loop(self):
         while True:
             for _ in range(random.choice(self.activity_cycle_range)):
+                if self.throwing_igloo_party:
+                    await self.room.send_xt('ss', self.id, SAFE_MESSAGES.PARTY_AT_MY_IGLOO)
                 if self.plugin_config.get('enable_room_spots', True):
                     await self.move_to_spot()
                 if self.plugin_config.get('enable_random_frame', True):
@@ -75,7 +81,7 @@ class PenguinBot(Penguin):
                     await self.random_move()
             if self.plugin_config.get('enable_random_room_movement', True) and self.following_penguin is None:
                 await asyncio.sleep(random.choice(self.activity_sleep_range))
-                await self.move_to_random_room()  
+                await self.move_to_random_room()
             
     async def move_to_spot(self):
         spots_controller = ROOM_SPOTS[self.room.id]
@@ -179,6 +185,23 @@ class PenguinBot(Penguin):
         await asyncio.sleep(2)
         await self.move_to_random_room()
         
+    async def open_igloo(self):
+        self.igloo_rooms = await PenguinIglooRoomCollection.get_collection(self.id)
+        await create_first_igloo(self, self.id)
+        
+        igloo = self.igloo_rooms[self.igloo]
+        await igloo.update(
+            type=random.choice(list(self.server.igloos.keys())),
+            location=random.choice(list(self.server.locations.keys()))
+        ).apply()
+        
+        self.server.open_igloos_by_penguin_id[self.id] = igloo
+        
+    def close_igloo(self):
+        self.throwing_igloo_party = False
+        if self.id in self.server.open_igloos_by_penguin_id:
+            del self.server.open_igloos_by_penguin_id[self.id]
+    
     async def disconnect(self):
         del self.server.penguins_by_id[self.id]
         del self.server.penguins_by_username[self.username]
@@ -186,6 +209,8 @@ class PenguinBot(Penguin):
         if self.character in self.server.penguins_by_character_id:
             del self.server.penguins_by_character_id[self.character]
             
+        self.close_igloo()
+
         await self.room.remove_penguin(self)
         self._activity_task.cancel()
         self.server.logger.info(f'{self.username} disconnected')
@@ -246,11 +271,20 @@ class PenguinBot(Penguin):
         
     async def move_to_random_room(self):
         bot_rooms = self.plugin_config.get('bot_rooms', self.bot_plugin.default_room_ids)
-        available_rooms = [x for x in bot_rooms if self.room is None or x != self.room.id]
+        available_rooms = [self.bot_plugin.server.rooms[x] for x in bot_rooms if self.room is None or x != self.room.id]
         set_room_weights = self.plugin_config.get('room_weights', {})
-        room_weights = [set_room_weights.get(str(x), 1) for x in available_rooms]
-        await self.join_room(
-            self.bot_plugin.server.rooms[random.choices(available_rooms, weights=room_weights)[0]])
+        room_weights = [set_room_weights.get(str(x.id), 1) for x in available_rooms]
+        
+        igloos = self.server.open_igloos_by_penguin_id.values()
+        igloo_standard_weight = self.plugin_config.get('igloo_room_weight', self.default_igloo_room_weight)
+        partying_igloo_weight = self.plugin_config.get('partying_igloo_room_weight', self.default_igloo_room_weight)
+        igloo_weights = [partying_igloo_weight if not isinstance(
+            self.server.penguins_by_id[i.penguin_id], self.__class__) or 
+                         self.server.penguins_by_id[i.penguin_id].throwing_igloo_party
+                         else igloo_standard_weight for i in igloos]
+        available_rooms += igloos
+        room_weights += igloo_weights
+        await self.join_room(random.choices(available_rooms, weights=room_weights)[0])
         
     async def join_game(self, target_penguin: Penguin, waddle: RoomWaddle):
         if waddle.id in self.plugin_config.get('bot_waddles', self.bot_plugin.default_waddle_ids):

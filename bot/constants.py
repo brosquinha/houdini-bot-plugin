@@ -12,6 +12,7 @@ class SafeMessages:
     FOLLOW_ME = 310
     U_ARE_SILLY = 354
     WHERE = 410
+    PARTY_AT_MY_IGLOO = 712
     GO_AWAY = 802
     
 @dataclass(frozen=True)
