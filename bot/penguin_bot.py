@@ -186,16 +186,21 @@ class PenguinBot(Penguin):
         await self.move_to_random_room()
         
     async def open_igloo(self):
-        self.igloo_rooms = await PenguinIglooRoomCollection.get_collection(self.id)
+        if not self.igloo_rooms:
+            self.igloo_rooms = await PenguinIglooRoomCollection.get_collection(self.id)
         await create_first_igloo(self, self.id)
         
-        igloo = self.igloo_rooms[self.igloo]
+        if not self.igloo:
+            self.igloo = random.choice(list(self.igloo_rooms.values())).id
+        
+        igloo = self.server.igloos_by_penguin_id.get(self.id, self.igloo_rooms[self.igloo])
         await igloo.update(
             type=random.choice(list(self.server.igloos.keys())),
             location=random.choice(list(self.server.locations.keys()))
         ).apply()
         
-        self.server.open_igloos_by_penguin_id[self.id] = igloo
+        if self.id in self.server.penguins_by_id:
+            self.server.open_igloos_by_penguin_id[self.id] = igloo
         
     def close_igloo(self):
         self.throwing_igloo_party = False

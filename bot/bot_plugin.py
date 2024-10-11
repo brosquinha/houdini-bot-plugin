@@ -84,10 +84,21 @@ class BotPlugin(IPlugin):
         self.server.logger.info(f'Server {self.server.config.id} population: {len(self.server.penguins_by_id)}')
         
         if self.plugin_config.get('bot_rotation', True):
-            asyncio.create_task(self.bot_rotation())
+            self.create_supervised_task(self.bot_rotation)
             
         if self.plugin_config.get('bot_igloo_rotation', True):
-            asyncio.create_task(self.bot_igloo_rotation())
+            self.create_supervised_task(self.bot_igloo_rotation)
+            
+    def create_supervised_task(self, func, *args, **kwargs) -> asyncio.Task:
+        async def supervised():
+            while True:
+                try:
+                    return await func(*args, **kwargs)
+                except Exception as error:
+                    self.server.logger.error(f"Task done by exception: {error}")
+                    self.server.logger.exception(error)
+                    await asyncio.sleep(5)
+        return asyncio.create_task(supervised())
             
     async def create_penguin_bots(self, population: int):
         random_names = await self._get_random_names()
@@ -180,6 +191,7 @@ class BotPlugin(IPlugin):
             party_bots = random.sample(open_bots, min(
                 self.plugin_config.get('bot_throwing_igloo_party', self.default_bot_throwing_igloo_party), len(open_bots)))
             for bot in open_bots:
+                self.server.logger.info(f'{bot.username} is opening its igloo')
                 await bot.open_igloo()
             for bot in party_bots:
                 self.server.logger.info(f'{bot.username} is throwing an igloo party')
