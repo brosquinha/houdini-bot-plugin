@@ -6,8 +6,7 @@ from inspect import signature
 from typing import List, Tuple, TYPE_CHECKING
 
 import houdini.data.penguin
-from houdini.data.room import Room, RoomWaddle, PenguinIglooRoomCollection
-from houdini.handlers.play.igloo import create_first_igloo
+from houdini.data.room import PenguinIglooRoom, PenguinIglooRoomCollection, Room, RoomWaddle
 from houdini.penguin import Penguin
 from houdini.plugins.bot.fake_writer import FakeWriter
 from houdini.plugins.bot.constants import ITEM_TYPE, ROOM_AREAS, ROOM_SPOTS, SAFE_MESSAGES, RoomSpot, RoomSpotsController
@@ -55,6 +54,8 @@ class PenguinBot(Penguin):
 
         if self.character is not None:
             self.server.penguins_by_character_id[self.character] = self
+        
+        self.igloo_rooms = await PenguinIglooRoomCollection.get_collection(self.id)
         
         await self.move_to_random_room()
         self.randomize_position()
@@ -185,22 +186,13 @@ class PenguinBot(Penguin):
         await asyncio.sleep(2)
         await self.move_to_random_room()
         
-    async def open_igloo(self):
-        if not self.igloo_rooms:
-            self.igloo_rooms = await PenguinIglooRoomCollection.get_collection(self.id)
-        await create_first_igloo(self, self.id)
-        
-        if not self.igloo:
-            self.igloo = random.choice(list(self.igloo_rooms.values())).id
-        
-        igloo = self.server.igloos_by_penguin_id.get(self.id, self.igloo_rooms[self.igloo])
-        await igloo.update(
-            type=random.choice(list(self.server.igloos.keys())),
-            location=random.choice(list(self.server.locations.keys()))
-        ).apply()
-        
+    @property
+    def igloo_room(self):
+        return self.server.igloos_by_penguin_id.get(self.id, self.igloo_rooms[self.igloo])
+    
+    def open_igloo(self):
         if self.id in self.server.penguins_by_id:
-            self.server.open_igloos_by_penguin_id[self.id] = igloo
+            self.server.open_igloos_by_penguin_id[self.id] = self.igloo_room
         
     def close_igloo(self):
         self.throwing_igloo_party = False
@@ -223,6 +215,12 @@ class PenguinBot(Penguin):
     def is_player_close(self, p) -> bool:
         return math.dist((self.x, self.y), (p.x, p.y)) < self.plugin_config.get(
             'interaction_distance', self.default_interaction_distance)
+    
+    async def randomize_igloo(self) -> PenguinIglooRoom:
+        return await self.igloo_room.update(
+            type=random.choice(list(self.server.igloos.keys())),
+            location=random.choice(list(self.server.locations.keys()))
+        ).apply()
     
     async def randomize_clothes(self):
         self.color = random.choice(self.bot_plugin.items_by_type[ITEM_TYPE.COLOR]).id

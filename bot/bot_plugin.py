@@ -12,7 +12,7 @@ from houdini import handlers
 from houdini.data.item import PenguinItem
 from houdini.data.penguin import Penguin
 from houdini.data.plugin import PenguinAttribute
-from houdini.data.room import Room, RoomWaddle
+from houdini.data.room import PenguinIglooRoom, Room, RoomWaddle
 from houdini.crypto import Crypto
 from houdini.handlers import XTPacket
 from houdini.houdini import Houdini
@@ -74,7 +74,8 @@ class BotPlugin(IPlugin):
             penguins = await self.create_penguin_bots(2 * bot_population - len(set_bot_ids))
             penguins = [x for x in penguins if x]
             self.server.logger.info(f'{len(penguins)} bot accounts created')
-            penguin_bots += penguins
+            penguin_bots += random.sample(penguins, min(bot_population - len(penguin_bots), len(penguins)))
+            self.existing_penguin_bots += penguins
         
         self.bots = [PenguinBot(x.id, self).load_data(x) for x in penguin_bots]
         for bot in self.bots:
@@ -129,9 +130,12 @@ class BotPlugin(IPlugin):
 
             await PenguinAttribute.create(penguin_id=penguin.id, name="bot", value="true")
             await PenguinItem.create(penguin_id=penguin.id, item_id=int(color))
+            igloo = await PenguinIglooRoom.create(penguin_id=penguin.id, type=1, flooring=0, location=1)
+            
+            update_kwargs = {'igloo': igloo.id}
             
             if self.plugin_config.get('bot_penguin_default_inventory', True):
-                await penguin.update(**{
+                update_kwargs = {**update_kwargs, **{
                     'head': int(random.choice(self.items_by_type[ITEM_TYPE.HEAD]).id),
                     'face': int(random.choice(self.items_by_type[ITEM_TYPE.FACE]).id),
                     'neck': int(random.choice(self.items_by_type[ITEM_TYPE.NECK]).id),
@@ -140,7 +144,8 @@ class BotPlugin(IPlugin):
                     'feet': int(random.choice(self.items_by_type[ITEM_TYPE.FEET]).id),
                     'flag': int(random.choice(self.items_by_type[ITEM_TYPE.FLAG]).id),
                     'photo': int(random.choice(self.items_by_type[ITEM_TYPE.PHOTO]).id)
-                }).apply()
+                }}
+            await penguin.update(**update_kwargs).apply()
         
         return penguin
     
@@ -192,7 +197,8 @@ class BotPlugin(IPlugin):
                 self.plugin_config.get('bot_throwing_igloo_party', self.default_bot_throwing_igloo_party), len(open_bots)))
             for bot in open_bots:
                 self.server.logger.info(f'{bot.username} is opening its igloo')
-                await bot.open_igloo()
+                await bot.randomize_igloo()
+                bot.open_igloo()
             for bot in party_bots:
                 self.server.logger.info(f'{bot.username} is throwing an igloo party')
                 bot.throwing_igloo_party = True
