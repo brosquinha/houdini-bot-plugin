@@ -200,6 +200,8 @@ class PenguinBot(Penguin):
             del self.server.open_igloos_by_penguin_id[self.id]
     
     async def disconnect(self):
+        del self.server.peers_by_ip[self.peer_name]
+        
         del self.server.penguins_by_id[self.id]
         del self.server.penguins_by_username[self.username]
 
@@ -210,6 +212,7 @@ class PenguinBot(Penguin):
 
         await self.room.remove_penguin(self)
         self._activity_task.cancel()
+        self._activity_task = None
         self.server.logger.info(f'{self.username} disconnected')
     
     def is_player_close(self, p) -> bool:
