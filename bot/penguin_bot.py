@@ -6,6 +6,7 @@ from inspect import signature
 from typing import List, Tuple, TYPE_CHECKING
 
 import houdini.data.penguin
+from houdini.data.plugin import PenguinAttributeCollection
 from houdini.data.room import PenguinIglooRoom, PenguinIglooRoomCollection, Room, RoomWaddle
 from houdini.penguin import Penguin
 from houdini.plugins.bot.fake_writer import FakeWriter
@@ -56,6 +57,7 @@ class PenguinBot(Penguin):
             self.server.penguins_by_character_id[self.character] = self
         
         self.igloo_rooms = await PenguinIglooRoomCollection.get_collection(self.id)
+        self.attributes = await PenguinAttributeCollection.get_collection(self.id)
         
         await self.move_to_random_room()
         self.randomize_position()
